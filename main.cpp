@@ -23,6 +23,7 @@ Types getType(const char chr) {
 struct Token {
     Types type = Types::Comment;
     char data = 0;
+    bool isSecondOperation = false;
 };
 
 auto optimizer(std::string_view input) {
@@ -37,9 +38,19 @@ auto optimizer(std::string_view input) {
     for (const char& code : input) {
         Types current = getType(code);
 
+        bool ommit = false;
+
         // Brace checking
         if (current == Types::Loop) {
             if (code == '[') ++braceCounter; else --braceCounter;
+
+            // FIXME: add smart checking
+            // if (current == preceding) {
+            //     if (code == ']') {
+            //         ommit = true;
+            //         // output.pop_back();
+            //     }
+            // }
         }
 
         // Code for arithmetic
@@ -51,6 +62,10 @@ auto optimizer(std::string_view input) {
         if (current == Types::PointerArithmetic || current == Types::ValueArithmetic) {
             hasStarted = true;
             if (code == '+' || code == '>') ++valueCounter; else --valueCounter;
+        } else {
+            bool isSecondOperation = false;
+            if (code == '.' || code == ']') isSecondOperation = true;
+            output.push_back({current, 0, isSecondOperation});
         }
 
         preceding = current;
@@ -62,11 +77,50 @@ auto optimizer(std::string_view input) {
     return output;
 }
 
+std::string translator(const auto& tokens) {
+    std::string output;
+
+    unsigned char indentationLevel = 0;
+
+    for (const auto& token : tokens) {
+        output += std::string(indentationLevel * 2, ' ');
+
+        if (token.type == Types::PointerArithmetic || token.type == Types::ValueArithmetic) {
+            std::string sign;
+            if (token.type == Types::PointerArithmetic) output += "*";
+            if (token.data < 0) sign = "-"; else sign = "+"; // weird ahh fix
+            output += "p " + sign + "= " + std::to_string(abs(token.data)) + ";";
+        } else if (token.type == Types::IO) {
+            if (!token.isSecondOperation)
+                output += "*p = getchar();";
+            else
+                output += "putchar(*p);";
+        } else if (token.type == Types::Loop) {
+            if (!token.isSecondOperation) {
+                output += "if (*p) do {";
+                ++indentationLevel;
+            }
+            else {
+                output.pop_back(); output.pop_back();
+                output += "} while (*p);";
+                --indentationLevel;
+            }
+        } else throw std::logic_error("Something went wrong at translation");
+        output += '\n';
+    }
+
+    return output;
+}
+
 int main() {
-    std::string_view input{"[++]--<>>+++."};
+    std::string_view input{"[][+++]"};
 
     auto tokens = optimizer(input);
 
-    for (auto token : tokens)
-        std::cout << (int)token.data << '\n';
+    // for (auto token : tokens)
+    //     std::cout << (int)token.data << '\n';
+
+    auto output = translator(tokens);
+
+    std::cout << output;
 }
