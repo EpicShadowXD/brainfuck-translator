@@ -1,82 +1,60 @@
-#include <unordered_map>
 #include <string>
+#include <string_view>
+#include <iostream>
 #include <vector>
-#include <utility>
 
-enum class Token {
-    MinusPointer,
-    PlusPointer,
-    MinusValue,
-    PlusValue,
-    BeginLoop,
-    EndLoop,
-    Input,
-    Output,
-    Uninitialized
+enum class Types {
+    PointerArithmetic,
+    ValueArithmetic,
+    IO,
+    Loop,
+    Comment,
 };
 
-const std::unordered_map<char, Token> types {
-    {'<', Token::MinusPointer},
-    {'>', Token::PlusPointer},
-    {'-', Token::MinusValue},
-    {'+', Token::PlusValue},
-    {'[', Token::BeginLoop},
-    {']', Token::EndLoop},
-    {',', Token::Input},
-    {'.', Token::Output}
+Types getType(const char chr) {
+    switch (chr) {
+    case '<': case '>': return Types::PointerArithmetic;
+    case '+': case '-': return Types::ValueArithmetic;
+    case '.': case ',': return Types::IO;
+    case '[': case ']': return Types::Loop;
+    default: return Types::Comment;
+    }
+}
+
+struct Token {
+    Types type = Types::Comment;
+    char data = 0;
 };
 
-auto tokenizer(std::string input) {
+auto optimizer(std::string_view input) {
     std::vector<Token> output;
-    output.reserve(input.size());
 
-    for (const char& chr : input)
-        output.push_back(types.at(chr));
+    char counter = 0;
+    Types preceding = Types::Comment;
+    bool hasStarted = false;
 
-    return output;
-}
+    for (const char& code : input) {
+        Types current = getType(code);
 
-const std::unordered_map<Token, std::string> c_conversions{
-    {Token::MinusPointer, "p -= "},
-    {Token::PlusPointer, "p += "},
-    {Token::MinusValue, "\\*p -= "},
-    {Token::PlusValue, "\\*p += "},
-    {Token::BeginLoop, "if (\\*p) do {"},
-    {Token::EndLoop, "} while (\\*p);"},
-    {Token::Input, "\\*p = getchar();"},
-    {Token::Output, "putchar(\\*p);"}
-};
+        if (current != preceding && hasStarted) {
+            output.push_back({preceding, counter});
+            counter = 0;
+        }
 
-bool isValueTypeInstruction(Token token) {
-    switch(token) {
-        case Token::MinusPointer:
-        case Token::PlusPointer:
-        case Token::MinusValue:
-        case Token::PlusValue:
-            return true;
-    } return false;
-}
+        if (current == Types::PointerArithmetic || current == Types::ValueArithmetic) {
+            hasStarted = true;
+            if (code == '+' || code == '>') ++counter; else --counter;
+        }
 
-std::string translator(const auto& tokens) {
-    std::string output;
-
-    int counter = 0;
-    bool isPointer = false;
-    bool isValue = false;
-    Token lastToken = Token::Uninitialized;
-
-    for (const auto& token : tokens) {
-        isPointer = false; isValue = false;
-        if (token == Token::MinusPointer || token == Token::PlusPointer)
-            isPointer = true;
-        if (token == Token::MinusValue || token == Token::PlusValue)
-            isValue = true;
-        
+        preceding = current;
     }
 
     return output;
 }
 
 int main() {
-
+    [[maybe_unused]] auto tokens = optimizer("+-->><++-.");
+    for (auto token : tokens) {
+        std::cout << (int)token.data << '\n';
+    }
 }
