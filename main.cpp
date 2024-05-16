@@ -1,6 +1,9 @@
 #include <string_view>
 #include <iostream>
 #include <vector>
+#include <array>
+#include <utility>
+#include <optional>
 
 enum class Types {
     PointerArithmetic,
@@ -21,13 +24,27 @@ Types getType(const char chr) {
 }
 
 struct Token {
+    // make a smart union for less memory usage depending on the use case
+    // std::variant<Types, std::tuple<char, bool>> container;
     Types type = Types::Comment;
     char data = 0;
     bool isSecondOperation = false;
 };
 
+template <typename NumericType>
+NumericType nrOfDigits(NumericType number) {
+    NumericType counter{0};
+    while (number) {
+        ++counter;
+        number /= 10;
+    } return counter;
+}
+
 auto optimizer(std::string_view input) {
     std::vector<Token> output;
+    unsigned long long size = 0;
+    
+    unsigned char indentation = 0;
 
     // Trying to pack these properly but compiler will most likely optimize it anyway
     char valueCounter = 0;
@@ -55,6 +72,12 @@ auto optimizer(std::string_view input) {
 
         // Code for arithmetic
         if (current != preceding && hasStarted && valueCounter != 0) {
+            if (current == Types::PointerArithmetic)
+                size += 7;
+            if (current == Types::ValueArithmetic)
+                size += 8;
+            size += nrOfDigits(valueCounter);
+
             output.push_back({preceding, valueCounter});
             valueCounter = 0;
         }
@@ -65,6 +88,14 @@ auto optimizer(std::string_view input) {
         } else {
             bool isSecondOperation = false;
             if (code == '.' || code == ']') isSecondOperation = true;
+
+            switch (code) {
+                case ',': size += 16 + indentation; break;
+                case '.': size += 13 + indentation; break;
+                case '[': indentation += 2; size += 13 + indentation; break;
+                case ']': indentation -= 2; size += 14 + indentation; break;
+            }
+            // 16 13 13 14
             output.push_back({current, 0, isSecondOperation});
         }
 
@@ -74,11 +105,13 @@ auto optimizer(std::string_view input) {
     if (braceCounter > 0) throw std::logic_error("Too many OPEN braces");
     if (braceCounter < 0) throw std::logic_error("Too many CLOSE braces");
 
-    return output;
+    return std::make_tuple(output, size);
 }
 
-std::string translator(const auto& tokens) {
+std::string translator(const auto& input) {
+    const auto& [tokens, size] = input;
     std::string output;
+    output.reserve(size);
 
     unsigned char indentationLevel = 0;
 
@@ -113,13 +146,9 @@ std::string translator(const auto& tokens) {
 }
 
 int main() {
-    std::string_view input{"[][+++]"};
+    std::string_view input{"+>[+++],."};
 
     auto tokens = optimizer(input);
-
-    // for (auto token : tokens)
-    //     std::cout << (int)token.data << '\n';
-
     auto output = translator(tokens);
 
     std::cout << output;
